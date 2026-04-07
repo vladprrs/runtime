@@ -1,7 +1,7 @@
-# Requirements: Runtime — Execution Layer
+# Requirements: Runtime -- Execution Layer
 
 **Defined:** 2026-04-07
-**Core Value:** The SDG file is the single source of truth for service behavior — changing the model and restarting is the only mechanism to alter behavior.
+**Core Value:** The SDG file is the single source of truth for service behavior -- changing the model and restarting is the only mechanism to alter behavior.
 
 ## v1 Requirements
 
@@ -208,10 +208,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLI-03 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 57 total
-- Mapped to phases: 57
+- v1 requirements: 59 total
+- Mapped to phases: 59
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-07*
-*Last updated: 2026-04-07 after initial definition*
+*Last updated: 2026-04-07 after roadmap creation*
