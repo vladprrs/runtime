@@ -37,8 +37,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Workspace skeleton: Rust toolchain, 8 crate scaffolds, centralized deps, quality gates
-- [ ] 01-02-PLAN.md — CI pipeline: Multi-stage Dockerfile with cargo-chef and quality gates for Dokploy
+- [x] 01-01-PLAN.md — Workspace skeleton: Rust toolchain, 8 crate scaffolds, centralized deps, quality gates
+- [x] 01-02-PLAN.md — CI pipeline: Multi-stage Dockerfile with cargo-chef and quality gates for Dokploy
 
 ### Phase 2: SDG Schema & Loader
 **Goal**: The runtime can load, validate, and parse an SDG file into typed Rust structures, rejecting invalid definitions at startup with clear error messages
