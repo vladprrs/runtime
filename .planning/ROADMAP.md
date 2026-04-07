@@ -34,10 +34,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `cargo fmt --check` and `cargo clippy --workspace -- -D warnings` pass cleanly
   4. Dokploy Dockerfile builds successfully, running build + test + fmt + clippy as quality gates
   5. All workspace dependencies are centralized in workspace-level `[workspace.dependencies]`
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Workspace skeleton: Rust toolchain, 8 crate scaffolds, centralized deps, quality gates
+- [ ] 01-02-PLAN.md — CI pipeline: Multi-stage Dockerfile with cargo-chef and quality gates for Dokploy
 
 ### Phase 2: SDG Schema & Loader
 **Goal**: The runtime can load, validate, and parse an SDG file into typed Rust structures, rejecting invalid definitions at startup with clear error messages
@@ -162,7 +163,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Dev Environment | 0/0 | Not started | - |
+| 1. Dev Environment | 0/2 | Planning complete | - |
 | 2. SDG Schema & Loader | 0/0 | Not started | - |
 | 3. Event Store | 0/0 | Not started | - |
 | 4. Aggregate Engine | 0/0 | Not started | - |
