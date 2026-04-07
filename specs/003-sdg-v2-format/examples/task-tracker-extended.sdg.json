@@ -1,0 +1,199 @@
+{
+  "schema_version": "2.0.0",
+  "service": {
+    "name": "task-tracker-extended",
+    "description": "Task management with linked tasks, user assignments, and ownership enforcement",
+    "owner": "platform-team"
+  },
+
+  "computations": {
+    "nodes": [
+      { "id": "actor_id",            "type": "context",      "params": { "path": "actor.id" } },
+      { "id": "actor_state",         "type": "lookup",       "params": { "aggregate": "User", "pick": "state" } },
+      { "id": "actor_active",        "type": "eq",           "params": { "right": "Active" } },
+
+      { "id": "assignee_id",         "type": "field",        "params": { "name": "assignee_id" } },
+      { "id": "has_assignee",        "type": "neq",          "params": { "right": null } },
+
+      { "id": "is_assignee",         "type": "eq" },
+
+      { "id": "linked_ids",          "type": "field",        "params": { "name": "linked_task_ids" } },
+      { "id": "linked_states",       "type": "lookup_many",  "params": { "aggregate": "Task", "pick": "state" } },
+      { "id": "open_linked",         "type": "filter",       "params": { "not_in": ["Done", "Cancelled"] } },
+      { "id": "open_count",          "type": "count" },
+      { "id": "zero",                "type": "literal",      "params": { "value": 0 } },
+      { "id": "all_linked_done",     "type": "eq" },
+
+      { "id": "can_complete",        "type": "and" },
+
+      { "id": "cmd_assignee",        "type": "command",      "params": { "name": "assignee_id" } },
+      { "id": "cmd_assignee_state",  "type": "lookup",       "params": { "aggregate": "User", "pick": "state" } },
+      { "id": "cmd_assignee_active", "type": "eq",           "params": { "right": "Active" } },
+
+      { "id": "cmd_linked_id",       "type": "command",      "params": { "name": "linked_task_id" } },
+      { "id": "self_id",             "type": "field",        "params": { "name": "id" } },
+      { "id": "not_self_link",       "type": "neq" },
+      { "id": "already_linked",      "type": "contains" },
+      { "id": "not_duplicate",       "type": "not" },
+      { "id": "can_link",            "type": "and" },
+
+      { "id": "is_linked",           "type": "contains" }
+    ],
+
+    "edges": [
+      { "from": "actor_id",            "to": "actor_state",         "port": "id" },
+      { "from": "actor_state",         "to": "actor_active",        "port": "left" },
+
+      { "from": "assignee_id",         "to": "has_assignee",        "port": "left" },
+
+      { "from": "actor_id",            "to": "is_assignee",         "port": "left" },
+      { "from": "assignee_id",         "to": "is_assignee",         "port": "right" },
+
+      { "from": "linked_ids",          "to": "linked_states",       "port": "ids" },
+      { "from": "linked_states",       "to": "open_linked",         "port": "items" },
+      { "from": "open_linked",         "to": "open_count",          "port": "items" },
+      { "from": "open_count",          "to": "all_linked_done",     "port": "left" },
+      { "from": "zero",                "to": "all_linked_done",     "port": "right" },
+
+      { "from": "has_assignee",        "to": "can_complete",        "port": "in", "index": 0 },
+      { "from": "is_assignee",         "to": "can_complete",        "port": "in", "index": 1 },
+      { "from": "all_linked_done",     "to": "can_complete",        "port": "in", "index": 2 },
+      { "from": "actor_active",        "to": "can_complete",        "port": "in", "index": 3 },
+
+      { "from": "cmd_assignee",        "to": "cmd_assignee_state",  "port": "id" },
+      { "from": "cmd_assignee_state",  "to": "cmd_assignee_active", "port": "left" },
+
+      { "from": "cmd_linked_id",       "to": "not_self_link",       "port": "left" },
+      { "from": "self_id",             "to": "not_self_link",       "port": "right" },
+      { "from": "not_self_link",       "to": "can_link",            "port": "in", "index": 0 },
+
+      { "from": "linked_ids",          "to": "already_linked",      "port": "collection" },
+      { "from": "cmd_linked_id",       "to": "already_linked",      "port": "item" },
+      { "from": "already_linked",      "to": "not_duplicate",       "port": "value" },
+      { "from": "not_duplicate",       "to": "can_link",            "port": "in", "index": 1 },
+
+      { "from": "linked_ids",          "to": "is_linked",           "port": "collection" },
+      { "from": "cmd_linked_id",       "to": "is_linked",           "port": "item" }
+    ]
+  },
+
+  "model": {
+    "aggregates": {
+      "User": {
+        "fields": {
+          "name":  { "type": "string", "required": true, "min_length": 1, "max_length": 255 },
+          "email": { "type": "string", "required": true, "format": "email" }
+        },
+        "states": ["Active", "Deactivated"],
+        "transitions": {
+          "Register": {
+            "from": "Active", "to": "Active"
+          },
+          "UpdateProfile": {
+            "from": "Active", "to": "$same",
+            "command": { "fields": {
+              "name": { "type": "string", "min_length": 1 }
+            }}
+          },
+          "Deactivate": {
+            "from": "Active", "to": "Deactivated"
+          }
+        }
+      },
+
+      "Task": {
+        "fields": {
+          "title":           { "type": "string", "required": true, "min_length": 1, "max_length": 255 },
+          "description":     { "type": "string", "max_length": 5000 },
+          "author_id":       { "type": "uuid", "references": "User" },
+          "assignee_id":     { "type": "uuid", "references": "User" },
+          "priority":        { "type": "integer", "min": 1, "max": 5, "default": 3 },
+          "linked_task_ids": { "type": "uuid[]", "references": "Task" }
+        },
+        "states": ["Created", "InProgress", "Done", "Cancelled"],
+        "transitions": {
+          "Create": {
+            "from": "Created", "to": "Created",
+            "auto_fields": {
+              "author_id": "actor_id"
+            }
+          },
+          "Start": {
+            "from": "Created", "to": "InProgress",
+            "command": { "fields": {
+              "assignee_id": { "type": "uuid", "required": true }
+            }},
+            "guard": "cmd_assignee_active"
+          },
+          "Reassign": {
+            "from": "InProgress", "to": "$same",
+            "command": { "fields": {
+              "assignee_id": { "type": "uuid", "required": true }
+            }},
+            "guard": "cmd_assignee_active"
+          },
+          "EditFields": {
+            "from": ["Created", "InProgress"], "to": "$same",
+            "command": { "fields": {
+              "title":       { "type": "string", "min_length": 1 },
+              "description": { "type": "string" }
+            }}
+          },
+          "ChangePriority": {
+            "from": ["Created", "InProgress"], "to": "$same",
+            "command": { "fields": {
+              "priority": { "type": "integer", "required": true, "min": 1, "max": 5 }
+            }}
+          },
+          "LinkTask": {
+            "from": ["Created", "InProgress"], "to": "$same",
+            "command": { "fields": {
+              "linked_task_id": { "type": "uuid", "required": true }
+            }},
+            "guard": "can_link"
+          },
+          "UnlinkTask": {
+            "from": ["Created", "InProgress"], "to": "$same",
+            "command": { "fields": {
+              "linked_task_id": { "type": "uuid", "required": true }
+            }},
+            "guard": "is_linked"
+          },
+          "Complete": {
+            "from": "InProgress", "to": "Done",
+            "guard": "can_complete",
+            "description": "Only the assignee can complete. All linked tasks must be closed."
+          },
+          "Cancel": {
+            "from": ["Created", "InProgress"], "to": "Cancelled",
+            "command": { "fields": {
+              "reason": { "type": "string" }
+            }}
+          }
+        }
+      }
+    }
+  },
+
+  "api": {
+    "expose": "all",
+    "base_path": "/api",
+    "custom_queries": {
+      "tasks_by_assignee": {
+        "source": "Task",
+        "filter_by": "assignee_id",
+        "fields": ["title", "priority", "state", "assignee_id", "created_at"]
+      },
+      "tasks_by_author": {
+        "source": "Task",
+        "filter_by": "author_id",
+        "fields": ["title", "priority", "state", "author_id", "created_at"]
+      },
+      "task_count_by_status": {
+        "source": "Task",
+        "group_by": "state",
+        "aggregation": { "count": "count" }
+      }
+    }
+  }
+}
