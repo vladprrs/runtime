@@ -1,6 +1,6 @@
 # Phase 2: SDG Schema & Loader - Context
 
-**Gathered:** 2026-04-07 (revised for SDG v2)
+**Gathered:** 2026-04-07 (revised for SDG v2, updated 2026-04-07)
 **Status:** Ready for planning
 
 <domain>
@@ -32,7 +32,7 @@ Define the SDG v2 JSON Schema (Draft 2020-12), build a multi-pass validator, par
 - **D-12:** Computations section has `nodes[]` (flat array) and `edges[]` (flat array). Inspired by n8n workflow format. No nesting — topology is fully described by edges.
 - **D-13:** Each node: `{ "id": string, "type": string, "params": {} }`. ID is unique within the service. Type is from the function catalog.
 - **D-14:** Each edge: `{ "from": string, "to": string, "port": string, "index?": integer }`. Port is a named input on the target node. Index for variadic ports (and/or).
-- **D-15:** Three leaf node types (data sources): `field` (aggregate state), `command` (command payload), `context` (request context: actor.id, timestamp, correlation_id).
+- **D-15:** Four leaf node types (data sources): `field` (aggregate state), `command` (command payload), `context` (request context: actor.id, timestamp, correlation_id), `literal` (constant value with explicit `output_type` param).
 - **D-16:** `lookup` and `lookup_many` nodes read from projections (eventually consistent). Takes `aggregate` + `pick` params, wired via `id`/`ids` port.
 - **D-17:** Collection operations: `filter` (with `in`/`not_in`/`eq`/`neq` params), `count`, `sum`, `min`, `max`, `any`, `all`, `contains`, `length`.
 - **D-18:** Comparison: `eq`, `neq`, `gt`, `lt`, `gte`, `lte`. If only one port wired, the other from `params.right`/`params.left`.
@@ -60,6 +60,18 @@ Define the SDG v2 JSON Schema (Draft 2020-12), build a multi-pass validator, par
 - **D-32:** Task has: title, description, author_id (references User), assignee_id (references User), priority (1-5), linked_task_ids (uuid[], references Task).
 - **D-33:** Computation graph with: actor context, cross-aggregate lookups (User.state, Task.state), collection operations (filter, count), ownership check (actor_id == assignee_id), linked tasks guard (all linked done).
 - **D-34:** Canonical fixture at `crates/sdg-loader/fixtures/valid_task_tracker.sdg.json`. Plus 8-10 broken fixtures each triggering specific validation errors.
+
+### Literal Node Type-Checking
+- **D-36:** `literal` node requires explicit `output_type` param: `{ "value": 0, "output_type": "integer" }`. Type inferred from JSON value is ambiguous for edge cases (null, empty arrays). Loader validates that `output_type` is a valid SDG type and uses it for edge type-checking.
+
+### Implicit Aggregate Fields
+- **D-37:** Every aggregate has 5 implicit fields injected by the runtime: `id` (uuid), `state` (string), `created_at` (datetime), `updated_at` (datetime), `version` (integer). These are accessible via `field`-nodes in the computation DAG and auto-included in derived projections. Users cannot declare fields with these names (validation error). Semantic validation (Pass 3) resolves `field`-node references against both explicit fields and implicit fields.
+
+### API Section Parsing Scope
+- **D-38:** The `api` section (`expose`, `base_path`, `protocol`, `overrides`, `custom_queries`) is parsed into typed Rust structs and validated for JSON Schema conformance only. Semantic validation of references (e.g., `custom_queries.source` → existing aggregate, `filter_by` → existing field, `overrides` → existing transition) is deferred to Phase 6 (API Surface). `protocol` values other than `"http"` are accepted by the parser but gRPC support is post-MVP.
+
+### Context Path Validation
+- **D-39:** `context`-nodes are strictly validated against the known path set in semantic validation (Pass 3): `actor.id` (uuid), `actor.email` (string), `actor.roles` (string[]), `timestamp` (datetime), `correlation_id` (uuid). Unknown paths are validation errors with "did you mean?" suggestions. The output type of a `context`-node is determined from this table, enabling full type-checking of edges from context-nodes to downstream nodes.
 
 ### Expression Sugar Layer
 - **D-35:** Deferred to post-MVP. Phase 2 builds the DAG engine only. String expression shorthand (e.g., `"guard": "assignee != ''"` compiled to DAG nodes) is a future convenience layer.

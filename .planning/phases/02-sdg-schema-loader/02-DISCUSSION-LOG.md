@@ -159,6 +159,55 @@
 - Suggestion algorithm for hints
 - Snapshot testing strategy
 
+---
+
+## Update Session: Spec Alignment Review (2026-04-07)
+
+**Trigger:** User requested reading `specs/003-sdg-v2-format/spec.md` and fixing CONTEXT.md
+**Mode:** discuss (update — spec alignment review)
+
+### 1. Literal — 4th Leaf Node Type
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| How is the literal node's type determined for edge type-checking? | Infer from value / Explicit type param | **Explicit type param** |
+
+**Correction:** D-15 changed from "Three leaf node types" to "Four leaf node types" (added `literal`). New D-36 requires `output_type` param.
+**Rationale:** Explicit type avoids ambiguity for edge cases (null, empty arrays).
+
+### 2. Implicit Aggregate Fields
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| Which fields are implicit for every aggregate? | 5 fields as in spec / Only id and state / Claude decides | **5 fields as in spec** |
+
+**New decision:** D-37 — `id` (uuid), `state` (string), `created_at` (datetime), `updated_at` (datetime), `version` (integer).
+**Rationale:** Spec §6.4 derives projections with all 5. Task tracker accesses `id` via field-node.
+
+### 3. API Section Parsing Scope
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| How deep should loader parse api section in Phase 2? | Full parsing + semantic validation / Parse without gRPC / Minimal (types only) | **Minimal (types only)** |
+
+**New decision:** D-38 — Parse into typed structs, JSON Schema validation only. Semantic validation deferred to Phase 6.
+**Rationale:** Phase 2 focuses on model + computations. Phase 6 owns endpoint generation.
+
+### 4. Context Path Validation
+
+| Question | Options | Selected |
+|----------|---------|----------|
+| How to validate context-nodes in computation DAG? | Strict validation (error) / Soft validation (warning) | **Strict validation** |
+
+**New decision:** D-39 — Unknown context paths are errors in Pass 3. Type from fixed table enables edge type-checking.
+**Rationale:** Fixed set means unknown paths are always bugs.
+
+### Corrections to Existing Decisions
+
+| Decision | Original | Updated |
+|----------|----------|---------|
+| D-15 | Three leaf node types: field, command, context | Four leaf node types: field, command, context, literal |
+
 ## Deferred Ideas
 
 None — discussion stayed within phase scope
