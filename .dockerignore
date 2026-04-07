@@ -1,0 +1,11 @@
+target/
+.git/
+.planning/
+.specify/
+.claude/
+specs/
+*.md
+!crates/**/README.md
+Dockerfile
+.dockerignore
+.gitignore
