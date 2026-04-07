@@ -1,0 +1,22 @@
+[package]
+name = "event-store"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
+rusqlite_migration = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+tempfile = { workspace = true }
+assert_matches = { workspace = true }

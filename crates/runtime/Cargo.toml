@@ -1,0 +1,24 @@
+[package]
+name = "runtime"
+version = "0.1.0"
+edition = "2021"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "runtime"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sdg-loader = { workspace = true }
+event-store = { workspace = true }
+aggregate-engine = { workspace = true }
+projections = { workspace = true }
+api-surface = { workspace = true }
+middleware = { workspace = true }
+observability = { workspace = true }
