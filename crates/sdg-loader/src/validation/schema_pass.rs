@@ -1,9 +1,18 @@
 use crate::error::SdgError;
+use crate::schema::create_validator;
 
 /// Pass 1: Validate raw JSON against the embedded SDG JSON Schema.
 /// Returns all schema violations found (per D-29: collect all errors within pass).
-pub fn validate_schema(_raw: &serde_json::Value) -> Vec<SdgError> {
-    todo!("RED: implement schema validation")
+pub fn validate_schema(raw: &serde_json::Value) -> Vec<SdgError> {
+    let validator = create_validator();
+    validator
+        .iter_errors(raw)
+        .map(|error| SdgError::SchemaViolation {
+            instance_path: error.instance_path().to_string(),
+            schema_path: error.schema_path().to_string(),
+            message: error.to_string(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -15,8 +24,7 @@ mod tests {
         let fixture_path = format!(
             "{manifest_dir}/../../specs/003-sdg-v2-format/examples/task-tracker-extended.sdg.json"
         );
-        let content =
-            std::fs::read_to_string(&fixture_path).expect("canonical fixture must exist");
+        let content = std::fs::read_to_string(&fixture_path).expect("canonical fixture must exist");
         serde_json::from_str(&content).expect("fixture must be valid JSON")
     }
 
@@ -37,9 +45,14 @@ mod tests {
             "model": { "aggregates": {} }
         });
         let errors = validate_schema(&raw);
-        assert!(!errors.is_empty(), "missing 'service' should fail schema validation");
         assert!(
-            errors.iter().any(|e| matches!(e, SdgError::SchemaViolation { .. })),
+            !errors.is_empty(),
+            "missing 'service' should fail schema validation"
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, SdgError::SchemaViolation { .. })),
             "errors should be SchemaViolation type"
         );
     }

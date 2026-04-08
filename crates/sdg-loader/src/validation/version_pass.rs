@@ -1,12 +1,31 @@
 use crate::error::SdgError;
+use semver::Version;
 
 /// The major version this runtime supports.
 pub const SUPPORTED_MAJOR_VERSION: u64 = 2;
 
-/// Pass 2: Check schema_version field for SemVer compatibility.
-/// Major version must match SUPPORTED_MAJOR_VERSION. Minor/patch differences accepted.
-pub fn validate_version(_raw: &serde_json::Value) -> Vec<SdgError> {
-    todo!("RED: implement version validation")
+/// Pass 2: Check `schema_version` field for `SemVer` compatibility.
+/// Major version must match `SUPPORTED_MAJOR_VERSION`. Minor/patch differences accepted.
+pub fn validate_version(raw: &serde_json::Value) -> Vec<SdgError> {
+    let Some(version_str) = raw.get("schema_version").and_then(|v| v.as_str()) else {
+        return vec![SdgError::MissingVersion];
+    };
+
+    let Ok(version) = Version::parse(version_str) else {
+        return vec![SdgError::InvalidVersion {
+            value: version_str.to_string(),
+            reason: "not a valid SemVer string".to_string(),
+        }];
+    };
+
+    if version.major != SUPPORTED_MAJOR_VERSION {
+        return vec![SdgError::IncompatibleVersion {
+            found: version.to_string(),
+            expected_major: SUPPORTED_MAJOR_VERSION,
+        }];
+    }
+
+    vec![]
 }
 
 #[cfg(test)]

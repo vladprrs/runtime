@@ -15,14 +15,51 @@ use crate::types::ServiceDefinition;
 /// 4. DAG materialization (wired in Plan 03)
 ///
 /// Each pass collects all errors. Later passes do not run if earlier pass fails (D-29).
-pub fn load(_path: &Path) -> Result<ServiceDefinition, Vec<SdgError>> {
-    todo!("RED: implement load pipeline")
+pub fn load(path: &Path) -> Result<ServiceDefinition, Vec<SdgError>> {
+    // Read file
+    let content = std::fs::read_to_string(path).map_err(|e| {
+        vec![SdgError::FileRead {
+            path: path.to_owned(),
+            source: e,
+        }]
+    })?;
+
+    // Parse JSON
+    let raw: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        vec![SdgError::JsonParse {
+            message: e.to_string(),
+        }]
+    })?;
+
+    validate(&raw)
 }
 
 /// Validate raw JSON without loading from file.
 /// Useful for testing or when JSON is already in memory.
-pub fn validate(_raw: &serde_json::Value) -> Result<ServiceDefinition, Vec<SdgError>> {
-    todo!("RED: implement validate pipeline")
+pub fn validate(raw: &serde_json::Value) -> Result<ServiceDefinition, Vec<SdgError>> {
+    // Pass 1: Schema conformance
+    let schema_errors = schema_pass::validate_schema(raw);
+    if !schema_errors.is_empty() {
+        return Err(schema_errors);
+    }
+
+    // Pass 2: Version compatibility
+    let version_errors = version_pass::validate_version(raw);
+    if !version_errors.is_empty() {
+        return Err(version_errors);
+    }
+
+    // Deserialize into typed structs
+    let definition: ServiceDefinition = serde_json::from_value(raw.clone()).map_err(|e| {
+        vec![SdgError::Deserialization {
+            message: e.to_string(),
+        }]
+    })?;
+
+    // Pass 3: Semantic validation (placeholder -- wired in Plan 03)
+    // Pass 4: DAG materialization (placeholder -- wired in Plan 03)
+
+    Ok(definition)
 }
 
 #[cfg(test)]
@@ -102,8 +139,7 @@ mod tests {
         let fixture_path = format!(
             "{manifest_dir}/../../specs/003-sdg-v2-format/examples/task-tracker-extended.sdg.json"
         );
-        let content =
-            std::fs::read_to_string(&fixture_path).expect("canonical fixture must exist");
+        let content = std::fs::read_to_string(&fixture_path).expect("canonical fixture must exist");
         let raw: serde_json::Value =
             serde_json::from_str(&content).expect("fixture must be valid JSON");
 
