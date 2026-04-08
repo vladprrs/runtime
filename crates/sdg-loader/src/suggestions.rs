@@ -1,12 +1,14 @@
 use strsim::normalized_damerau_levenshtein;
 
 /// Find the closest match from candidates, returning a formatted suggestion string.
-/// Returns None if no candidate is similar enough (>0.6 threshold).
-/// Example: suggest_similar("Creatd", &["Created", "InProgress"]) -> Some(". Did you mean 'Created'?")
+/// Returns `None` if no candidate is similar enough (>0.6 threshold).
 pub fn suggest_similar(input: &str, candidates: &[&str]) -> Option<String> {
-    // TODO: implement
-    let _ = (input, candidates, normalized_damerau_levenshtein);
-    None
+    candidates
+        .iter()
+        .map(|c| (*c, normalized_damerau_levenshtein(input, c)))
+        .filter(|(_, score)| *score > 0.6)
+        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(candidate, _)| format!(". Did you mean '{candidate}'?"))
 }
 
 /// Format suggestion or return empty string for error message interpolation.
@@ -32,13 +34,19 @@ mod tests {
     #[test]
     fn test_suggest_no_match() {
         let result = suggest_similar("xyz", &["Created", "InProgress", "Done"]);
-        assert!(result.is_none(), "should not suggest for very dissimilar input");
+        assert!(
+            result.is_none(),
+            "should not suggest for very dissimilar input"
+        );
     }
 
     #[test]
     fn test_suggest_exact_match() {
         let result = suggest_similar("Created", &["Created", "InProgress"]);
-        assert!(result.is_some(), "exact match should suggest (similarity = 1.0)");
+        assert!(
+            result.is_some(),
+            "exact match should suggest (similarity = 1.0)"
+        );
         let suggestion = result.unwrap();
         assert!(
             suggestion.contains("Created"),
