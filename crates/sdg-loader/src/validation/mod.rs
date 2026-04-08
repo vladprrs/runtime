@@ -157,8 +157,7 @@ mod tests {
     }
 
     fn load_fixture() -> ServiceDefinition {
-        let content =
-            std::fs::read_to_string(fixture_path()).expect("fixture file must exist");
+        let content = std::fs::read_to_string(fixture_path()).expect("fixture file must exist");
         let raw: serde_json::Value =
             serde_json::from_str(&content).expect("fixture must be valid JSON");
         validate(&raw).expect("fixture must validate and deserialize")
@@ -166,8 +165,7 @@ mod tests {
 
     #[test]
     fn test_fixture_schema_validates() {
-        let content =
-            std::fs::read_to_string(fixture_path()).expect("fixture file must exist");
+        let content = std::fs::read_to_string(fixture_path()).expect("fixture file must exist");
         let raw: serde_json::Value =
             serde_json::from_str(&content).expect("fixture must be valid JSON");
         let errors = schema_pass::validate_schema(&raw);
@@ -218,7 +216,11 @@ mod tests {
                 "Task should have field '{expected}'"
             );
         }
-        assert_eq!(task.fields.len(), 6, "Task should have 6 user-defined fields");
+        assert_eq!(
+            task.fields.len(),
+            6,
+            "Task should have 6 user-defined fields"
+        );
     }
 
     #[test]
@@ -231,8 +233,19 @@ mod tests {
             sd.computations.nodes.len()
         );
         // Check key nodes exist
-        let node_ids: Vec<&str> = sd.computations.nodes.iter().map(|n| n.id.as_str()).collect();
-        for expected in &["actor_id", "can_complete", "is_assignee", "zero", "all_linked_done"] {
+        let node_ids: Vec<&str> = sd
+            .computations
+            .nodes
+            .iter()
+            .map(|n| n.id.as_str())
+            .collect();
+        for expected in &[
+            "actor_id",
+            "can_complete",
+            "is_assignee",
+            "zero",
+            "all_linked_done",
+        ] {
             assert!(
                 node_ids.contains(expected),
                 "expected node '{expected}' to exist"
