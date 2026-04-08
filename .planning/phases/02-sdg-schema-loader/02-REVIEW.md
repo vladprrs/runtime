@@ -1,8 +1,8 @@
 ---
 phase: 02-sdg-schema-loader
-reviewed: 2026-04-08T00:00:00Z
+reviewed: 2026-04-08T09:20:49Z
 depth: standard
-files_reviewed: 26
+files_reviewed: 27
 files_reviewed_list:
   - Cargo.toml
   - crates/sdg-loader/Cargo.toml
@@ -19,83 +19,72 @@ files_reviewed_list:
   - crates/sdg-loader/src/validation/version_pass.rs
   - crates/sdg-loader/tests/integration.rs
   - crates/sdg-loader/fixtures/valid_task_tracker.sdg.json
-  - crates/sdg-loader/fixtures/invalid_context_path.sdg.json
+  - crates/sdg-loader/fixtures/invalid_edge_type_mismatch.sdg.json
+  - crates/sdg-loader/fixtures/invalid_port_name.sdg.json
   - crates/sdg-loader/fixtures/invalid_dag_cycle.sdg.json
   - crates/sdg-loader/fixtures/invalid_dangling_edge.sdg.json
   - crates/sdg-loader/fixtures/invalid_duplicate_node.sdg.json
+  - crates/sdg-loader/fixtures/invalid_context_path.sdg.json
   - crates/sdg-loader/fixtures/invalid_implicit_field.sdg.json
   - crates/sdg-loader/fixtures/invalid_missing_required.sdg.json
   - crates/sdg-loader/fixtures/invalid_state_reference.sdg.json
   - crates/sdg-loader/fixtures/invalid_type_mismatch.sdg.json
   - crates/sdg-loader/fixtures/invalid_unknown_node_type.sdg.json
   - crates/sdg-loader/fixtures/invalid_version.sdg.json
-  - specs/003-sdg-v2-format/examples/task-tracker-extended.sdg.json
 findings:
   critical: 0
   warning: 5
-  info: 4
-  total: 9
+  info: 3
+  total: 8
 status: issues_found
 ---
 
 # Phase 02: Code Review Report
 
-**Reviewed:** 2026-04-08
+**Reviewed:** 2026-04-08T09:20:49Z
 **Depth:** standard
-**Files Reviewed:** 26
+**Files Reviewed:** 27
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the full `sdg-loader` crate: types, error definitions, all four validation passes (schema, version, semantic, DAG), the JSON Schema itself, integration tests, and all fixture files.
+Reviewed the complete `sdg-loader` crate: 5 library source files, 4 validation pass modules, 1 integration test file, and 13 fixtures. All 88 tests pass, clippy is clean at workspace pedantic level, and formatting is correct.
 
-The overall architecture is clean and well-structured. The four-pass pipeline with early exit is correctly implemented. The JSON Schema is thorough and the test suite covers the happy path and all defined error variants.
+The four-pass validation pipeline (schema, version, semantic, DAG) is well-structured and correctly short-circuits on earlier-pass failures. The JSON Schema is thorough, edge type-checking in Pass 4 is comprehensive, and the test suite has good coverage of both valid and invalid inputs.
 
-Three categories of issues were found:
+Five warnings were found. The most significant are three missing validation checks in the semantic pass that allow invalid SDGs to reach the runtime silently: (1) the `initial_state` override is never validated against the `states` list; (2) a `context` node missing its required `path` param silently passes; (3) `auto_fields` key names are never checked against actual aggregate fields. Two further warnings cover a dead error variant (`InvalidFieldReference`) and an unnecessary full-clone of the raw JSON during deserialization. Three info items cover duplicated constants, a misnamed fixture, and an infallible write suppression.
 
-1. **Unreachable error variants** — `DagInvalidPort`, `InvalidFieldReference`, and `TypeMismatch` are defined in `error.rs` but never constructed. This will cause clippy `dead_code` warnings and creates confusion about what validation is actually enforced.
-2. **Silent validation gaps** — a `context` node with no `path` param silently passes, and a `field` node with an unresolvable name silently passes. Both are logic errors in the semantic pass.
-3. **Misleading fixture naming** — `invalid_type_mismatch.sdg.json` does not test a `TypeMismatch` error; it tests `SemanticError` about a missing `output_type`. This creates confusion about what the file tests.
-
-No critical (security, crash, data loss) issues were found.
-
----
+No critical issues (security, crash, data loss) were found.
 
 ## Warnings
 
-### WR-01: Dead error variants — `DagInvalidPort`, `InvalidFieldReference`, `TypeMismatch` never constructed
+### WR-01: `initial_state` override never validated against the `states` list
 
-**File:** `crates/sdg-loader/src/error.rs:85-97` and `crates/sdg-loader/src/error.rs:130-135`
-
-**Issue:** Three error variants are declared in `SdgError` but no code in the crate ever constructs them:
-- `InvalidFieldReference` (line 85) — intended for cross-referencing field names in computation nodes
-- `TypeMismatch` (line 93) — intended for type-level edge compatibility checking
-- `DagInvalidPort` (line 130) — intended for validating port names on target nodes
-
-These are matched in `pass()` (lines 148, 155) which prevents compiler dead-code warnings on that arm, but no call site ever creates these variants. Clippy `pedantic` (enabled workspace-wide) will flag these as `dead_code` warnings unless the crate is suppressing them. More importantly, the validation they represent is silently absent.
-
-**Fix:** Either implement the missing validation passes that produce these errors, or remove the variants (and their `pass()` match arms) until the validation is implemented. If deferring to a future phase, replace the dead variants with a `// TODO(phaseN): not yet implemented` comment at minimum. Do not leave unreachable variants in an enum that is already used in production error reporting.
+**File:** `crates/sdg-loader/src/validation/semantic_pass.rs:98-175`
+**Issue:** `Aggregate.initial_state` is an optional override that a user can set to any string. The semantic pass validates every `from`/`to` state reference in transitions but has no equivalent check for `initial_state`. A user can write `"initial_state": "Typo"` in their SDG, pass all four validation passes, and the runtime will receive a `ValidatedSdg` carrying an invalid initial state. The JSON Schema does not constrain the value either — it types it as `string` only. The gap is in `validate_aggregates` which sets up `state_names` but never uses it to check `aggregate.initial_state`.
+**Fix:**
+```rust
+// In validate_aggregates, after `let state_names: Vec<&str> = ...` (around line 119):
+if let Some(initial) = &aggregate.initial_state {
+    if !state_names.contains(&initial.as_str()) {
+        errors.push(SdgError::InvalidStateReference {
+            path: format!("{path_prefix}.initial_state"),
+            name: initial.clone(),
+            aggregate: agg_name.clone(),
+            suggestion: suggestion_or_empty(initial, &state_names),
+        });
+    }
+}
+```
+Add a fixture `invalid_initial_state.sdg.json` and a corresponding integration test.
 
 ---
 
 ### WR-02: `context` node with missing `path` param silently passes semantic validation
 
 **File:** `crates/sdg-loader/src/validation/semantic_pass.rs:194-205`
-
-**Issue:** The context-path validation block is:
-
-```rust
-if node.node_type == "context" {
-    if let Some(path_val) = node.params.get("path").and_then(|v| v.as_str()) {
-        // validate path_val...
-    }
-}
-```
-
-The outer `if let Some(...)` means a `context` node that has no `path` param at all silently passes. A context node without a `path` is semantically invalid — the node cannot produce any value — but the validator emits no error. The JSON Schema does not require `path` on a context node either (the `params` object is an open schema), so this gap is not caught at the schema pass either.
-
+**Issue:** The context-path validation is wrapped in `if let Some(path_val) = node.params.get("path")...`, so a `context` node with no `path` param at all produces no error. A `context` node without a `path` cannot produce any value at runtime — it is semantically invalid — yet it passes all four validation passes. The JSON Schema does not require `path` on a context node's `params` object either (params is an open schema), so the schema pass does not catch this either.
 **Fix:**
-
 ```rust
 if node.node_type == "context" {
     match node.params.get("path").and_then(|v| v.as_str()) {
@@ -119,139 +108,85 @@ if node.node_type == "context" {
 }
 ```
 
-Add a corresponding fixture `invalid_context_missing_path.sdg.json` and integration test.
-
 ---
 
-### WR-03: `field` node name not validated against aggregate fields
-
-**File:** `crates/sdg-loader/src/validation/semantic_pass.rs:207-217`
-
-**Issue:** The field-node validation only checks for an empty `name` string:
-
-```rust
-if node.node_type == "field" {
-    if let Some(field_name) = node.params.get("name").and_then(|v| v.as_str()) {
-        if field_name.is_empty() {
-            errors.push(SdgError::SemanticError { ... "empty 'name' param" });
-        }
-    }
-}
-```
-
-It does not verify that the named field actually exists on any aggregate. A `field` node with `"name": "nonexistent_field"` will silently pass all four validation passes and only fail at runtime. This is the same class of problem as a guard referencing a nonexistent computation node (which is correctly caught). Additionally, a missing `name` param is not flagged at all — only an empty string is checked.
-
-**Fix:** Cross-reference the field name against the set of all aggregate field names (including implicit fields from `IMPLICIT_FIELDS`) and report `SemanticError` for unknown names. At minimum, also check for the absent `name` param case:
-
-```rust
-if node.node_type == "field" {
-    match node.params.get("name").and_then(|v| v.as_str()) {
-        None => {
-            errors.push(SdgError::SemanticError {
-                path: node_path.clone(),
-                message: "field node is missing required 'name' param".to_string(),
-            });
-        }
-        Some("") => {
-            errors.push(SdgError::SemanticError {
-                path: node_path.clone(),
-                message: "field node has empty 'name' param".to_string(),
-            });
-        }
-        Some(field_name) => {
-            let all_field_names: HashSet<&str> = definition
-                .model
-                .aggregates
-                .values()
-                .flat_map(|agg| agg.fields.keys().map(String::as_str))
-                .chain(IMPLICIT_FIELDS.iter().map(|(name, _)| *name))
-                .collect();
-            if !all_field_names.contains(field_name) {
-                errors.push(SdgError::SemanticError {
-                    path: node_path.clone(),
-                    message: format!(
-                        "field node references unknown field '{}'{}",
-                        field_name,
-                        suggestion_or_empty(
-                            field_name,
-                            &all_field_names.into_iter().collect::<Vec<_>>(),
-                        )
-                    ),
-                });
-            }
-        }
-    }
-}
-```
-
-Note: `validate_computation_nodes` currently only receives `&ServiceDefinition`, so it already has access to `definition.model.aggregates`.
-
----
-
-### WR-04: `validate` clones entire raw JSON value unnecessarily
-
-**File:** `crates/sdg-loader/src/validation/mod.rs:66`
-
-**Issue:**
-
-```rust
-let definition: ServiceDefinition = serde_json::from_value(raw.clone()).map_err(|e| { ... })?;
-```
-
-`serde_json::from_value` requires an owned `Value`. Since `raw` is `&serde_json::Value`, a full clone is made. For the startup-time `load()` path this is acceptable, but `validate()` is a public API that could be called with an already-owned value. The clone duplicates the entire JSON document (potentially large) just to feed `serde_json::from_value`.
-
-**Fix:** Change the `validate` signature to accept ownership of the raw value:
-
-```rust
-pub fn validate(raw: serde_json::Value) -> Result<ValidatedSdg, Vec<SdgError>>
-```
-
-Update `load()` to pass ownership:
-```rust
-let raw: serde_json::Value = serde_json::from_str(&content)...?;
-validate(raw)
-```
-
-This eliminates the clone and makes the ownership model explicit. Update call sites in tests — `validate(&raw)` becomes `validate(raw)` (tests that need to reuse `raw` can clone before the call explicitly).
-
----
-
-### WR-05: `auto_fields` target field names not validated against aggregate fields
+### WR-03: `auto_fields` key names never validated against aggregate field definitions
 
 **File:** `crates/sdg-loader/src/validation/semantic_pass.rs:163-174`
+**Issue:** `auto_fields` validation confirms the map value (a computation node ID) exists, but never validates the map key (the aggregate field name to populate). A typo such as `"autor_id": "actor_id"` passes all four validation passes and will cause a silent no-op at runtime. This is directly analogous to guard validation (which correctly catches non-existent node IDs) but is missing for field names.
 
-**Issue:** `auto_fields` validation checks that the value (computation node ID) exists, but not that the key (the aggregate field name being populated) is a real field on the aggregate:
+Additionally, the `SdgError::InvalidFieldReference` variant (defined in `error.rs:85`) is never constructed anywhere in the codebase. This warning and the fix below address both gaps simultaneously.
 
+**Fix:** After the existing node-ID check, add a field-name check:
 ```rust
 for (field_name, node_id) in &transition.auto_fields {
     if !node_ids.contains(&node_id.as_str()) {
-        // reports error for unknown node_id
+        errors.push(SdgError::SemanticError {
+            path: format!("{trans_path}.auto_fields.{field_name}"),
+            message: format!(
+                "auto_field references non-existent computation node '{node_id}'{}",
+                suggestion_or_empty(node_id, node_ids)
+            ),
+        });
     }
-    // field_name is never validated
+    // NEW: validate the key is a real aggregate field
+    let field_names: Vec<&str> = aggregate.fields.keys().map(String::as_str)
+        .chain(IMPLICIT_FIELDS.iter().map(|(n, _)| *n))
+        .collect();
+    if !field_names.contains(&field_name.as_str()) {
+        errors.push(SdgError::InvalidFieldReference {
+            path: format!("{trans_path}.auto_fields.{field_name}"),
+            name: field_name.clone(),
+            aggregate: agg_name.clone(),
+            suggestion: suggestion_or_empty(field_name, &field_names),
+        });
+    }
 }
 ```
 
-A typo in an `auto_fields` key such as `"autor_id": "actor_id"` passes validation silently and will cause a runtime failure. This is directly analogous to WR-03 and represents a missing cross-reference check.
+---
 
-**Fix:** After confirming `node_id` is valid, also verify `field_name` exists in `aggregate.fields` (or `IMPLICIT_FIELDS`):
+### WR-04: `validate()` clones entire raw JSON value for deserialization
 
+**File:** `crates/sdg-loader/src/validation/mod.rs:66`
+**Issue:** `serde_json::from_value(raw.clone())` clones the full `serde_json::Value` tree because `from_value` requires ownership while `validate` holds `raw` by shared reference (`&serde_json::Value`). For a large SDG this duplicates the entire document in memory. The public `validate` entry point is also less ergonomic than it could be for callers who already own a `Value`.
+**Fix:** Change `validate` to take ownership:
 ```rust
-if !aggregate.fields.contains_key(field_name)
-    && !IMPLICIT_FIELDS.iter().any(|(n, _)| *n == field_name.as_str())
-{
-    errors.push(SdgError::InvalidFieldReference {
-        path: format!("{trans_path}.auto_fields.{field_name}"),
-        name: field_name.clone(),
-        aggregate: agg_name.clone(),
-        suggestion: suggestion_or_empty(
-            field_name,
-            &aggregate.fields.keys().map(String::as_str).collect::<Vec<_>>(),
-        ),
-    });
+pub fn validate(raw: serde_json::Value) -> Result<ValidatedSdg, Vec<SdgError>> {
+    let schema_errors = schema_pass::validate_schema(&raw);
+    // ...
+    let definition: ServiceDefinition = serde_json::from_value(raw).map_err(|e| { ... })?;
+    // ...
 }
 ```
+Update `load()` to pass the locally-owned `raw` directly. Tests that call `validate(&raw)` must be updated to `validate(raw)` (clone explicitly before the call only where the test needs `raw` afterward — currently none do).
 
-This would also put the `InvalidFieldReference` error variant (currently dead — see WR-01) to use.
+---
+
+### WR-05: `IMPLICIT_FIELDS` and `VALID_CONTEXT_PATHS` duplicated verbatim across two modules
+
+**File:** `crates/sdg-loader/src/validation/semantic_pass.rs:8-23` and `crates/sdg-loader/src/validation/dag_pass.rs:10-25`
+**Issue:** Both constants are declared identically in both files. The semantic pass uses them for validation; the dag pass uses them for output-type resolution. Adding a new implicit field or context path requires updating two locations; a partial update silently produces inconsistent behavior between passes (semantic pass accepts a path that the dag pass cannot resolve a type for).
+**Fix:** Move both constants to a shared location, such as a new `crates/sdg-loader/src/catalog.rs` module:
+```rust
+// crates/sdg-loader/src/catalog.rs
+pub const IMPLICIT_FIELDS: &[(&str, &str)] = &[
+    ("id", "uuid"),
+    ("state", "string"),
+    ("created_at", "datetime"),
+    ("updated_at", "datetime"),
+    ("version", "integer"),
+];
+
+pub const VALID_CONTEXT_PATHS: &[(&str, &str)] = &[
+    ("actor.id", "uuid"),
+    ("actor.email", "string"),
+    ("actor.roles", "string[]"),
+    ("timestamp", "datetime"),
+    ("correlation_id", "uuid"),
+];
+```
+Import from both validation pass modules: `use crate::catalog::{IMPLICIT_FIELDS, VALID_CONTEXT_PATHS};`
 
 ---
 
@@ -260,83 +195,52 @@ This would also put the `InvalidFieldReference` error variant (currently dead �
 ### IN-01: Fixture `invalid_type_mismatch.sdg.json` is misnamed
 
 **File:** `crates/sdg-loader/fixtures/invalid_type_mismatch.sdg.json`
-
-**Issue:** The fixture contains a `literal` node missing its `output_type` param. The corresponding integration test (`tests/integration.rs:117`) is correctly named `test_invalid_literal_missing_output_type`. The fixture name implies it tests the `TypeMismatch` error variant, but it tests `SemanticError { message: "...output_type..." }`. This creates confusion for future contributors trying to understand what each fixture tests.
-
-**Fix:** Rename to `invalid_literal_missing_output_type.sdg.json` and update the reference in `tests/integration.rs:118`. Once the `TypeMismatch` variant (WR-01) is implemented, create a proper `invalid_type_mismatch.sdg.json` for that scenario.
+**Issue:** The fixture contains a `literal` node missing its `output_type` param. The integration test that loads it (`tests/integration.rs:117`) is correctly named `test_invalid_literal_missing_output_type` and asserts a `SemanticError` about `output_type`, not a `TypeMismatch`. The filename implies it tests the `TypeMismatch` error variant, which is now implemented for edge-level type conflicts. This naming conflict will confuse future contributors adding real type-mismatch fixtures.
+**Fix:** Rename to `invalid_literal_missing_output_type.sdg.json` and update the reference at `tests/integration.rs:118`.
 
 ---
 
-### IN-02: `valid_task_tracker.sdg.json` duplicates the canonical spec fixture
-
-**File:** `crates/sdg-loader/fixtures/valid_task_tracker.sdg.json`
-
-**Issue:** This fixture is byte-for-byte identical to `specs/003-sdg-v2-format/examples/task-tracker-extended.sdg.json`. The `validation/mod.rs` tests use both paths as if they are distinct documents. Tests in `schema.rs` and `validation/mod.rs` use the canonical spec path directly; tests in `tests/integration.rs` use the loader fixture. As the spec evolves, these two files can diverge silently — the spec gets updated but the loader fixture does not, causing tests to pass on a stale fixture.
-
-**Fix:** Have the loader fixture path point to the canonical spec example (or symlink it), or add a CI check that asserts the two files are identical. The duplicate should not exist as a copied file.
-
----
-
-### IN-03: Dead `let _ =` discards infallible `writeln!` result
+### IN-02: Dead `let _ =` suppression on an infallible write
 
 **File:** `crates/sdg-loader/src/error.rs:15`
-
 **Issue:**
-
 ```rust
 let _ = writeln!(output, "  {}. [pass: {}] {}", i + 1, error.pass(), error);
 ```
-
-`writeln!` on a `String` (via `std::fmt::Write`) returns `fmt::Result` which is always `Ok(())` — writing to a `String` cannot fail. The `let _ =` suppression is unnecessary. Clippy pedantic may flag this as `unused_must_use` or it may pass because `let _` is an explicit discard. Either way the code is misleading — it suggests the write could fail.
-
-**Fix:** Use the `write!`/`writeln!` directly without capturing the result, or use `push_str`:
-
+`writeln!` on a `String` via `std::fmt::Write` returns `fmt::Result` which is always `Ok(())` — writing to a heap-allocated `String` cannot fail. The `let _ =` suppresses a lint for an error that can never occur, which misleads readers into thinking the write could fail.
+**Fix:**
 ```rust
-writeln!(output, "  {}. [pass: {}] {}", i + 1, error.pass(), error).unwrap();
-// or simply:
-output.push_str(&format!("  {}. [pass: {}] {}\n", i + 1, error.pass(), error));
+writeln!(output, "  {}. [pass: {}] {}", i + 1, error.pass(), error)
+    .expect("writing to String is infallible");
 ```
-
-The `.unwrap()` form is idiomatic for infallible writes and makes the intent explicit.
+Or use `let () = writeln!(...).unwrap();` — either form makes the infallibility explicit.
 
 ---
 
-### IN-04: `schema_pass` creates a new validator on every call
+### IN-03: `schema_pass::validate_schema` recompiles the JSON Schema validator on every call
 
-**File:** `crates/sdg-loader/src/validation/schema_pass.rs:7`
-
-**Issue:**
-
-```rust
-pub fn validate_schema(raw: &serde_json::Value) -> Vec<SdgError> {
-    let validator = create_validator();
-    // ...
-}
-```
-
-`create_validator()` parses the embedded schema JSON and compiles a `jsonschema::Validator` on every call. For the production startup path (`load()` called once), this is acceptable. However, the test suite calls `validate_schema` directly in multiple unit tests, each creating a new validator. The `jsonschema` crate documentation recommends creating a validator once and reusing it.
-
-**Fix:** Consider using `std::sync::OnceLock` to cache the compiled validator:
-
+**File:** `crates/sdg-loader/src/validation/schema_pass.rs:6-7`
+**Issue:** `validate_schema` calls `create_validator()` on every invocation. `create_validator()` parses the embedded schema string and compiles it into a `jsonschema::Validator` each time. For the production startup path this is acceptable (called once), but the test suite calls `validate_schema` directly in multiple unit tests. The `jsonschema` documentation recommends compiling the validator once and reusing it.
+**Fix:** Cache the compiled validator using `OnceLock`:
 ```rust
 use std::sync::OnceLock;
 
 static VALIDATOR: OnceLock<jsonschema::Validator> = OnceLock::new();
 
 fn get_validator() -> &'static jsonschema::Validator {
-    VALIDATOR.get_or_init(|| {
-        let schema: serde_json::Value =
-            serde_json::from_str(SDG_SCHEMA_STR).expect("embedded SDG schema must be valid JSON");
-        jsonschema::draft202012::new(&schema)
-            .expect("embedded SDG schema must be valid Draft 2020-12")
-    })
+    VALIDATOR.get_or_init(create_validator)
+}
+
+pub fn validate_schema(raw: &serde_json::Value) -> Vec<SdgError> {
+    get_validator()
+        .iter_errors(raw)
+        .map(|error| SdgError::SchemaViolation { ... })
+        .collect()
 }
 ```
 
-This is not a correctness issue for single-threaded startup, but matters for test isolation and potential future multi-call patterns.
-
 ---
 
-_Reviewed: 2026-04-08_
+_Reviewed: 2026-04-08T09:20:49Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
