@@ -1,3 +1,4 @@
+pub mod dag_pass;
 pub mod schema_pass;
 pub mod semantic_pass;
 pub mod version_pass;
