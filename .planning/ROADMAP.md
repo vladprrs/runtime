@@ -50,13 +50,14 @@ Plans:
   3. Multi-pass validation catches schema violations, DAG cycles, type mismatches across edges, and completeness gaps
   4. Computation DAGs are materialized with pre-computed topological order ready for runtime evaluation
   5. SDG files with incompatible version numbers are rejected before any other processing
-**Plans:** 4 plans
+**Plans:** 5 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Foundation: workspace deps (semver, strsim), type definitions, error hierarchy, JSON Schema
-- [ ] 02-02-PLAN.md — Pipeline + fixture: task tracker SDG, validation passes 1-2, load() function
-- [ ] 02-03-PLAN.md — Semantic + DAG: suggestions module, semantic validation (Pass 3), DAG materialization (Pass 4), pipeline wiring
-- [ ] 02-04-PLAN.md — Error formatting + integration: broken fixtures, dual output format, comprehensive integration tests
+- [x] 02-01-PLAN.md — Foundation: workspace deps (semver, strsim), type definitions, error hierarchy, JSON Schema
+- [x] 02-02-PLAN.md — Pipeline + fixture: task tracker SDG, validation passes 1-2, load() function
+- [x] 02-03-PLAN.md — Semantic + DAG: suggestions module, semantic validation (Pass 3), DAG materialization (Pass 4), pipeline wiring
+- [x] 02-04-PLAN.md — Error formatting + integration: broken fixtures, dual output format, comprehensive integration tests
+- [ ] 02-05-PLAN.md — Gap closure: edge type-compatibility checking and port validation in DAG pass
 
 ### Phase 3: Event Store
 **Goal**: Domain events can be persisted reliably with per-aggregate streams, optimistic concurrency, and a clean trait abstraction that hides SQLite details
