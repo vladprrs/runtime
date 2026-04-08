@@ -1,4 +1,5 @@
 pub mod schema_pass;
+pub mod semantic_pass;
 pub mod version_pass;
 
 use std::path::Path;

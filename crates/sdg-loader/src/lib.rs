@@ -1,5 +1,6 @@
 pub mod error;
 pub mod schema;
+pub mod suggestions;
 pub mod types;
 pub mod validation;
 
