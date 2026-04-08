@@ -1,0 +1,396 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://runtime.dev/sdg/v2.0.0",
+  "title": "Service Definition Graph (SDG) v2",
+  "description": "JSON Schema for the SDG v2 format. Defines service identity, domain model (aggregates, fields, states, transitions), computation DAG (nodes, edges), and API configuration.",
+  "type": "object",
+  "required": ["schema_version", "service", "model"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "SemVer version of the SDG format (e.g. '2.0.0').",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "service": {
+      "$ref": "#/$defs/ServiceInfo"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelDefinition"
+    },
+    "computations": {
+      "$ref": "#/$defs/ComputationsDefinition"
+    },
+    "api": {
+      "$ref": "#/$defs/ApiConfig"
+    }
+  },
+  "$defs": {
+    "ServiceInfo": {
+      "type": "object",
+      "description": "Service identity metadata.",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Service name identifier."
+        },
+        "description": {
+          "type": "string",
+          "default": "",
+          "description": "Human-readable service description."
+        },
+        "owner": {
+          "type": "string",
+          "default": "unknown",
+          "description": "Team or individual owning the service."
+        }
+      }
+    },
+    "ModelDefinition": {
+      "type": "object",
+      "description": "Domain model containing aggregate definitions.",
+      "required": ["aggregates"],
+      "additionalProperties": false,
+      "properties": {
+        "aggregates": {
+          "type": "object",
+          "description": "Map of aggregate name to aggregate definition.",
+          "additionalProperties": {
+            "$ref": "#/$defs/Aggregate"
+          }
+        }
+      }
+    },
+    "Aggregate": {
+      "type": "object",
+      "description": "An aggregate root with fields, states, and transitions.",
+      "required": ["fields", "states"],
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "Map of field name to field definition.",
+          "additionalProperties": {
+            "$ref": "#/$defs/FieldDefinition"
+          }
+        },
+        "states": {
+          "type": "array",
+          "description": "Ordered list of valid states. First element is default initial state.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "initial_state": {
+          "type": "string",
+          "description": "Override for initial state (defaults to first element of states array)."
+        },
+        "transitions": {
+          "type": "object",
+          "description": "Map of transition name to transition definition.",
+          "additionalProperties": {
+            "$ref": "#/$defs/Transition"
+          }
+        }
+      }
+    },
+    "FieldDefinition": {
+      "type": "object",
+      "description": "A field definition within an aggregate or command.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "SDG type. Supports base types and array suffix syntax (e.g. 'uuid[]').",
+          "pattern": "^(string|integer|float|boolean|uuid|date|datetime|json)(\\[\\])?$"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the field is required."
+        },
+        "default": {
+          "description": "Default value if absent."
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum value (for integer/float)."
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum value (for integer/float)."
+        },
+        "min_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum string length."
+        },
+        "max_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum string length."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern for string validation."
+        },
+        "format": {
+          "type": "string",
+          "description": "Semantic format: email, uri, ipv4, ipv6, etc."
+        },
+        "references": {
+          "type": "string",
+          "description": "Declares relationship to another aggregate (informational, not enforced)."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable field description."
+        }
+      }
+    },
+    "StateRef": {
+      "description": "A state reference: single string or array of strings (D-07).",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      ]
+    },
+    "Transition": {
+      "type": "object",
+      "description": "A state transition within an aggregate.",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/StateRef",
+          "description": "Source state(s). String or array of strings."
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Target state. Use '$same' to remain in current state."
+        },
+        "command": {
+          "$ref": "#/$defs/CommandDefinition",
+          "description": "Command payload fields."
+        },
+        "guard": {
+          "type": "string",
+          "description": "ID of a computation node (must output boolean)."
+        },
+        "auto_fields": {
+          "type": "object",
+          "description": "Map of event field name to computation node ID.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "event_name": {
+          "type": "string",
+          "description": "Override derived event name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable transition description."
+        }
+      }
+    },
+    "CommandDefinition": {
+      "type": "object",
+      "description": "Command payload definition for a transition.",
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "Map of field name to field definition.",
+          "additionalProperties": {
+            "$ref": "#/$defs/FieldDefinition"
+          }
+        }
+      }
+    },
+    "ComputationsDefinition": {
+      "type": "object",
+      "description": "Computation DAG: flat nodes array and edges array.",
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "description": "Flat array of computation nodes.",
+          "items": {
+            "$ref": "#/$defs/ComputationNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "description": "Flat array of edges connecting nodes.",
+          "items": {
+            "$ref": "#/$defs/Edge"
+          }
+        }
+      }
+    },
+    "ComputationNode": {
+      "type": "object",
+      "description": "A computation node in the DAG.",
+      "required": ["id", "type"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique node identifier within the service."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "field", "command", "context", "literal",
+            "lookup", "lookup_many",
+            "filter", "count", "sum", "min", "max",
+            "any", "all", "contains", "length",
+            "eq", "neq", "gt", "lt", "gte", "lte",
+            "and", "or", "not",
+            "add", "sub", "mul", "div",
+            "concat", "str_contains", "str_len"
+          ],
+          "description": "Node type from the function catalog."
+        },
+        "params": {
+          "type": "object",
+          "description": "Type-specific parameters."
+        }
+      },
+      "if": {
+        "properties": {
+          "type": { "const": "literal" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "required": ["value"],
+            "properties": {
+              "output_type": {
+                "type": "string",
+                "pattern": "^(string|integer|float|boolean|uuid|date|datetime|json)(\\[\\])?$",
+                "description": "Explicit output type for literal nodes (D-36)."
+              }
+            }
+          }
+        }
+      }
+    },
+    "Edge": {
+      "type": "object",
+      "description": "An edge connecting computation nodes.",
+      "required": ["from", "to", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Source node ID."
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Target node ID."
+        },
+        "port": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Named input port on the target node."
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Slot index for variadic ports (and, or)."
+        }
+      }
+    },
+    "ApiConfig": {
+      "type": "object",
+      "description": "API configuration section.",
+      "additionalProperties": false,
+      "properties": {
+        "expose": {
+          "type": "string",
+          "enum": ["all", "none", "explicit"],
+          "default": "all",
+          "description": "Which aggregates get endpoints."
+        },
+        "base_path": {
+          "type": "string",
+          "default": "/api",
+          "description": "URL prefix for all generated endpoints."
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["http", "grpc", "both"],
+          "default": "http",
+          "description": "Protocol for generated endpoints."
+        },
+        "overrides": {
+          "type": "object",
+          "description": "Per-endpoint customization.",
+          "additionalProperties": true
+        },
+        "custom_queries": {
+          "type": "object",
+          "description": "Custom query definitions.",
+          "additionalProperties": {
+            "$ref": "#/$defs/CustomQuery"
+          }
+        }
+      }
+    },
+    "CustomQuery": {
+      "type": "object",
+      "description": "A custom query definition.",
+      "required": ["source"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Source aggregate name."
+        },
+        "filter_by": {
+          "type": "string",
+          "description": "Field to filter by."
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Fields to include in result."
+        },
+        "group_by": {
+          "type": "string",
+          "description": "Field to group by."
+        },
+        "aggregation": {
+          "description": "Aggregation configuration."
+        }
+      }
+    }
+  }
+}

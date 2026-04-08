@@ -1,7 +1,7 @@
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod error;
+pub mod schema;
+pub mod types;
+
+// Re-export key types
+pub use error::SdgError;
+pub use types::ServiceDefinition;

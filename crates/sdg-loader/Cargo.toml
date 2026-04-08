@@ -12,6 +12,8 @@ serde_json = { workspace = true }
 jsonschema = { workspace = true }
 thiserror = { workspace = true }
 petgraph = { workspace = true }
+semver = { workspace = true }
+strsim = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
