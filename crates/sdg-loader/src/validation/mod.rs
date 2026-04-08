@@ -146,4 +146,142 @@ mod tests {
         let sd = validate(&raw).expect("canonical fixture should validate");
         assert_eq!(sd.service.name, "task-tracker-extended");
     }
+
+    // --- Fixture tests (Task 2) ---
+
+    fn fixture_path() -> std::path::PathBuf {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        std::path::PathBuf::from(format!(
+            "{manifest_dir}/fixtures/valid_task_tracker.sdg.json"
+        ))
+    }
+
+    fn load_fixture() -> ServiceDefinition {
+        let content =
+            std::fs::read_to_string(fixture_path()).expect("fixture file must exist");
+        let raw: serde_json::Value =
+            serde_json::from_str(&content).expect("fixture must be valid JSON");
+        validate(&raw).expect("fixture must validate and deserialize")
+    }
+
+    #[test]
+    fn test_fixture_schema_validates() {
+        let content =
+            std::fs::read_to_string(fixture_path()).expect("fixture file must exist");
+        let raw: serde_json::Value =
+            serde_json::from_str(&content).expect("fixture must be valid JSON");
+        let errors = schema_pass::validate_schema(&raw);
+        assert!(
+            errors.is_empty(),
+            "fixture should pass schema validation, got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn test_fixture_deserializes() {
+        let sd = load_fixture();
+        assert_eq!(sd.model.aggregates.len(), 2);
+    }
+
+    #[test]
+    fn test_fixture_task_states() {
+        let sd = load_fixture();
+        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        assert_eq!(
+            task.states,
+            vec!["Created", "InProgress", "Done", "Cancelled"]
+        );
+    }
+
+    #[test]
+    fn test_fixture_user_states() {
+        let sd = load_fixture();
+        let user = sd.model.aggregates.get("User").expect("User aggregate");
+        assert_eq!(user.states, vec!["Active", "Deactivated"]);
+    }
+
+    #[test]
+    fn test_fixture_task_fields() {
+        let sd = load_fixture();
+        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        let field_names: Vec<&String> = task.fields.keys().collect();
+        for expected in &[
+            "title",
+            "description",
+            "author_id",
+            "assignee_id",
+            "priority",
+            "linked_task_ids",
+        ] {
+            assert!(
+                field_names.contains(&&expected.to_string()),
+                "Task should have field '{expected}'"
+            );
+        }
+        assert_eq!(task.fields.len(), 6, "Task should have 6 user-defined fields");
+    }
+
+    #[test]
+    fn test_fixture_computation_nodes() {
+        let sd = load_fixture();
+        // The spec example has ~22 nodes
+        assert!(
+            sd.computations.nodes.len() >= 22,
+            "expected at least 22 computation nodes, got {}",
+            sd.computations.nodes.len()
+        );
+        // Check key nodes exist
+        let node_ids: Vec<&str> = sd.computations.nodes.iter().map(|n| n.id.as_str()).collect();
+        for expected in &["actor_id", "can_complete", "is_assignee", "zero", "all_linked_done"] {
+            assert!(
+                node_ids.contains(expected),
+                "expected node '{expected}' to exist"
+            );
+        }
+    }
+
+    #[test]
+    fn test_fixture_computation_edges() {
+        let sd = load_fixture();
+        // The spec example has ~22 edges
+        assert!(
+            sd.computations.edges.len() >= 22,
+            "expected at least 22 computation edges, got {}",
+            sd.computations.edges.len()
+        );
+    }
+
+    #[test]
+    fn test_fixture_complete_guard() {
+        let sd = load_fixture();
+        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        let complete = task
+            .transitions
+            .get("Complete")
+            .expect("Complete transition");
+        assert_eq!(
+            complete.guard.as_deref(),
+            Some("can_complete"),
+            "Complete transition should have guard 'can_complete'"
+        );
+    }
+
+    #[test]
+    fn test_fixture_create_auto_fields() {
+        let sd = load_fixture();
+        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        let create = task.transitions.get("Create").expect("Create transition");
+        assert_eq!(
+            create.auto_fields.get("author_id").map(String::as_str),
+            Some("actor_id"),
+            "Create transition should have auto_fields author_id -> actor_id"
+        );
+    }
+
+    #[test]
+    fn test_fixture_load_from_file() {
+        let result = load(&fixture_path());
+        let sd = result.expect("fixture should load from file path");
+        assert_eq!(sd.service.name, "task-tracker-extended");
+    }
 }
