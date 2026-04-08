@@ -1,0 +1,22 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-edge-type-mismatch" },
+  "computations": {
+    "nodes": [
+      { "id": "str_val", "type": "literal", "params": { "value": "hello", "output_type": "string" } },
+      { "id": "logic_and", "type": "and" }
+    ],
+    "edges": [
+      { "from": "str_val", "to": "logic_and", "port": "in", "index": 0 }
+    ]
+  },
+  "model": {
+    "aggregates": {
+      "Thing": {
+        "fields": { "name": { "type": "string" } },
+        "states": ["Active"],
+        "transitions": {}
+      }
+    }
+  }
+}

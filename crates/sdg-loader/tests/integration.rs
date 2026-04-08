@@ -142,6 +142,30 @@ fn test_invalid_dangling_edge() {
         .any(|e| matches!(e, SdgError::DagEdgeReference { .. })));
 }
 
+#[test]
+fn test_invalid_edge_type_mismatch() {
+    let result = load(&fixture_path("invalid_edge_type_mismatch.sdg.json"));
+    let errors = result.expect_err("should fail DAG type-checking");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SdgError::TypeMismatch { .. })),
+        "should have TypeMismatch error, got: {errors:?}"
+    );
+}
+
+#[test]
+fn test_invalid_port_name() {
+    let result = load(&fixture_path("invalid_port_name.sdg.json"));
+    let errors = result.expect_err("should fail DAG port validation");
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SdgError::DagInvalidPort { .. })),
+        "should have DagInvalidPort error, got: {errors:?}"
+    );
+}
+
 // === ERROR FORMATTING ===
 
 #[test]

@@ -1,0 +1,22 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-invalid-port" },
+  "computations": {
+    "nodes": [
+      { "id": "val1", "type": "literal", "params": { "value": true, "output_type": "boolean" } },
+      { "id": "negate", "type": "not" }
+    ],
+    "edges": [
+      { "from": "val1", "to": "negate", "port": "input" }
+    ]
+  },
+  "model": {
+    "aggregates": {
+      "Thing": {
+        "fields": { "name": { "type": "string" } },
+        "states": ["Active"],
+        "transitions": {}
+      }
+    }
+  }
+}
