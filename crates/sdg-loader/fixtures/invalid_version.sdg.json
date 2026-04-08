@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0.0",
+  "service": { "name": "test-wrong-version" },
+  "model": {
+    "aggregates": {}
+  }
+}

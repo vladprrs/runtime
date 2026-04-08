@@ -1,0 +1,20 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-bad-state-ref" },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true }
+        },
+        "states": ["Created", "InProgress", "Done"],
+        "transitions": {
+          "Finish": {
+            "from": "InProgres",
+            "to": "Done"
+          }
+        }
+      }
+    }
+  }
+}

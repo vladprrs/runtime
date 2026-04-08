@@ -1,0 +1,22 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-duplicate-node" },
+  "computations": {
+    "nodes": [
+      { "id": "actor_id", "type": "context", "params": { "path": "actor.id" } },
+      { "id": "actor_id", "type": "field", "params": { "name": "title" } }
+    ],
+    "edges": []
+  },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true }
+        },
+        "states": ["Created"],
+        "transitions": {}
+      }
+    }
+  }
+}

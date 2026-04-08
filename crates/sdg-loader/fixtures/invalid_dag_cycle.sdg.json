@@ -1,0 +1,27 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-dag-cycle" },
+  "computations": {
+    "nodes": [
+      { "id": "node_a", "type": "eq", "params": {} },
+      { "id": "node_b", "type": "eq", "params": {} },
+      { "id": "node_c", "type": "eq", "params": {} }
+    ],
+    "edges": [
+      { "from": "node_a", "to": "node_b", "port": "left" },
+      { "from": "node_b", "to": "node_c", "port": "left" },
+      { "from": "node_c", "to": "node_a", "port": "left" }
+    ]
+  },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true }
+        },
+        "states": ["Created"],
+        "transitions": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-dangling-edge" },
+  "computations": {
+    "nodes": [
+      { "id": "valid_node", "type": "eq", "params": {} }
+    ],
+    "edges": [
+      { "from": "nonexistent_node", "to": "valid_node", "port": "left" }
+    ]
+  },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true }
+        },
+        "states": ["Created"],
+        "transitions": {}
+      }
+    }
+  }
+}

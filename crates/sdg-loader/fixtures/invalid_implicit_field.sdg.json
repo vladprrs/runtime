@@ -1,0 +1,16 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-implicit-field-conflict" },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true },
+          "id": { "type": "uuid" }
+        },
+        "states": ["Created"],
+        "transitions": {}
+      }
+    }
+  }
+}

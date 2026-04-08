@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-literal-missing-output-type" },
+  "computations": {
+    "nodes": [
+      { "id": "bad_literal", "type": "literal", "params": { "value": 42 } }
+    ],
+    "edges": []
+  },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true }
+        },
+        "states": ["Created"],
+        "transitions": {}
+      }
+    }
+  }
+}

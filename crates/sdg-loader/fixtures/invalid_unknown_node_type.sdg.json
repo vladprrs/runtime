@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-unknown-node-type" },
+  "computations": {
+    "nodes": [
+      { "id": "bad_node", "type": "foobar", "params": {} }
+    ],
+    "edges": []
+  },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true }
+        },
+        "states": ["Created"],
+        "transitions": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": "2.0.0",
+  "service": { "name": "test-bad-context-path" },
+  "computations": {
+    "nodes": [
+      { "id": "bad_ctx", "type": "context", "params": { "path": "actor.name" } }
+    ],
+    "edges": []
+  },
+  "model": {
+    "aggregates": {
+      "Task": {
+        "fields": {
+          "title": { "type": "string", "required": true }
+        },
+        "states": ["Created"],
+        "transitions": {}
+      }
+    }
+  }
+}
