@@ -701,19 +701,19 @@ fn suggest_similar(input: &str, candidates: &[&str]) -> Option<String> {
 | A5 | Clippy pedantic may flag large SdgError enum variants | Common Pitfalls, Pitfall 6 | Low -- easy to fix with `#[allow]` or `Box` if it happens |
 | A6 | 0.6 similarity threshold for "did you mean" suggestions | Code Examples | Low -- threshold is tunable; 0.6 is a reasonable starting point |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Exact SDG JSON Schema structure**
+1. **Exact SDG JSON Schema structure** -- RESOLVED by `specs/003-sdg-v2-format/spec.md` and v2 CONTEXT.md (D-01 through D-20). The SDG v2 spec fully defines the 4-section structure (`service`, `model`, `computations`, `api`), field names, nesting, and value formats. The task-tracker-extended example serves as the canonical reference.
    - What we know: The 6-pager (section 5.1) describes sections: service, glossary, aggregates, transitions, projections, endpoints, external_dependencies, processes. D-13 defines DAG node types.
    - What's unclear: The exact JSON nesting, field names, and value formats within each section need to be designed. The 6-pager gives section names but not JSON syntax.
    - Recommendation: This is in Claude's discretion (CONTEXT.md). Design the schema during implementation, following the example structure in this research. Use the task tracker fixture as the primary driver for schema design.
 
-2. **Guard condition output semantics**
+2. **Guard condition output semantics** -- RESOLVED by CONTEXT.md D-21: guards must output boolean. Transition `guard` references a computation node ID that must produce a boolean result. Phase 2 validates the node exists and is reachable; type-checking of the output is part of edge type-checking in the DAG pass.
    - What we know: Guards are computation DAGs that evaluate to a boolean result. D-14 says Phase 2 builds the graph but Phase 4 adds interpretation.
    - What's unclear: Whether the DAG `output` node must be a boolean-producing node (comparison or boolean_logic), or if any type is valid at Phase 2.
    - Recommendation: Phase 2 should validate that the output node exists and is reachable. Type validation of output can be deferred to Phase 4 (interpreter), or checked in semantic pass if we define output type expectations per context (guards must produce boolean).
 
-3. **Deferred section handling**
+3. **Deferred section handling** -- RESOLVED: no longer applicable in SDG v2. The v2 format (D-01) has only 4 sections (`service`, `model`, `computations`, `api`). The v1 deferred sections (TS blocks, Decision Tables, Integration Calls, BPMN processes) do not exist in v2. Expression sugar (D-35) is explicitly deferred to post-MVP.
    - What we know: D-01 says deferred sections (TS blocks, Decision Tables, Integration Calls, BPMN processes) should be "schema-valid but loader logs warnings and ignores them."
    - What's unclear: What "logs warnings" means in Phase 2 context (no logging infrastructure yet -- Phase 8 sets up observability).
    - Recommendation: Use `eprintln!` or collect warnings alongside the result. Or define a `LoadResult` struct with both the `ServiceDefinition` and `Vec<SdgWarning>`. Phase 8 can retroactively wire this to tracing.
