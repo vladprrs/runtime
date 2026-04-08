@@ -69,10 +69,7 @@ fn test_invalid_state_reference_with_suggestion() {
     let has_state_error = errors.iter().any(|e| {
         matches!(e, SdgError::InvalidStateReference { suggestion, .. } if suggestion.contains("InProgress"))
     });
-    assert!(
-        has_state_error,
-        "should suggest InProgress: {errors:?}"
-    );
+    assert!(has_state_error, "should suggest InProgress: {errors:?}");
 }
 
 #[test]

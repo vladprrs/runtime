@@ -1,5 +1,38 @@
+use std::fmt::Write as _;
 use std::path::PathBuf;
 use thiserror::Error;
+
+/// Format a list of SDG errors into a human-readable report.
+/// Each error includes: pass identification, JSON path, message, and suggestions.
+pub fn format_errors(errors: &[SdgError]) -> String {
+    if errors.is_empty() {
+        return String::from("No errors found.");
+    }
+
+    let mut output = format!("SDG validation failed with {} error(s):\n\n", errors.len());
+
+    for (i, error) in errors.iter().enumerate() {
+        let _ = writeln!(output, "  {}. [pass: {}] {}", i + 1, error.pass(), error);
+    }
+
+    output
+}
+
+/// Format errors as a JSON array for machine-readable output (per D-12 research).
+/// Returns a `serde_json::Value` array of error objects.
+pub fn errors_to_json(errors: &[SdgError]) -> serde_json::Value {
+    serde_json::Value::Array(
+        errors
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "pass": e.pass(),
+                    "message": e.to_string(),
+                })
+            })
+            .collect(),
+    )
+}
 
 /// All errors the SDG loader can produce, organized by validation pass.
 #[derive(Debug, Error)]
