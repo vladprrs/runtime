@@ -7,4 +7,4 @@ pub mod validation;
 // Re-export key types
 pub use error::SdgError;
 pub use types::ServiceDefinition;
-pub use validation::load;
+pub use validation::{load, MaterializedDag, ValidatedSdg};

@@ -23,11 +23,60 @@ pub struct MaterializedDag {
 /// Builds a `petgraph::DiGraph`, validates edge references, detects cycles
 /// via topological sort, and produces a pre-computed evaluation order.
 pub fn materialize_dags(
-    _computations: &ComputationsDefinition,
+    computations: &ComputationsDefinition,
 ) -> Result<MaterializedDag, Vec<SdgError>> {
-    // TODO: implement
-    let _ = _computations;
-    Err(vec![])
+    // If no nodes and no edges, return empty DAG.
+    if computations.nodes.is_empty() && computations.edges.is_empty() {
+        return Ok(MaterializedDag {
+            graph: DiGraph::new(),
+            topo_order: Vec::new(),
+            node_map: HashMap::new(),
+        });
+    }
+
+    let mut graph = DiGraph::new();
+    let mut node_map = HashMap::new();
+    let mut errors = Vec::new();
+
+    // Add nodes.
+    for node in &computations.nodes {
+        let idx = graph.add_node(node.id.clone());
+        node_map.insert(node.id.clone(), idx);
+    }
+
+    // Add edges with validation.
+    for edge in &computations.edges {
+        let src = node_map.get(&edge.from);
+        let dst = node_map.get(&edge.to);
+        match (src, dst) {
+            (Some(&src_idx), Some(&dst_idx)) => {
+                graph.add_edge(src_idx, dst_idx, edge.port.clone());
+            }
+            _ => {
+                errors.push(SdgError::DagEdgeReference {
+                    from: edge.from.clone(),
+                    to: edge.to.clone(),
+                });
+            }
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    // `toposort` detects cycles and returns topological order in one pass.
+    match toposort(&graph, None) {
+        Ok(order) => Ok(MaterializedDag {
+            graph,
+            topo_order: order,
+            node_map,
+        }),
+        Err(cycle) => {
+            let cycle_node = graph[cycle.node_id()].clone();
+            Err(vec![SdgError::DagCycle { node: cycle_node }])
+        }
+    }
 }
 
 #[cfg(test)]
@@ -36,7 +85,10 @@ mod tests {
     use crate::types::{ComputationNode, ComputationsDefinition, Edge};
 
     /// Helper: build `ComputationsDefinition` from nodes and edges.
-    fn make_computations(nodes: Vec<(&str, &str)>, edges: Vec<(&str, &str, &str)>) -> ComputationsDefinition {
+    fn make_computations(
+        nodes: Vec<(&str, &str)>,
+        edges: Vec<(&str, &str, &str)>,
+    ) -> ComputationsDefinition {
         ComputationsDefinition {
             nodes: nodes
                 .into_iter()
@@ -118,33 +170,29 @@ mod tests {
         let result = materialize_dags(&computations);
         let errors = result.expect_err("cycle should be detected");
         assert!(
-            errors.iter().any(|e| matches!(e, SdgError::DagCycle { .. })),
+            errors
+                .iter()
+                .any(|e| matches!(e, SdgError::DagCycle { .. })),
             "should have DagCycle error, got: {errors:?}"
         );
     }
 
     #[test]
     fn test_dag_edge_nonexistent_source() {
-        let computations = make_computations(
-            vec![("a", "eq")],
-            vec![("nonexistent", "a", "left")],
-        );
+        let computations = make_computations(vec![("a", "eq")], vec![("nonexistent", "a", "left")]);
         let result = materialize_dags(&computations);
         let errors = result.expect_err("nonexistent source should fail");
         assert!(
-            errors
-                .iter()
-                .any(|e| matches!(e, SdgError::DagEdgeReference { from, .. } if from == "nonexistent")),
+            errors.iter().any(
+                |e| matches!(e, SdgError::DagEdgeReference { from, .. } if from == "nonexistent")
+            ),
             "should have DagEdgeReference for nonexistent source, got: {errors:?}"
         );
     }
 
     #[test]
     fn test_dag_edge_nonexistent_target() {
-        let computations = make_computations(
-            vec![("a", "eq")],
-            vec![("a", "nonexistent", "left")],
-        );
+        let computations = make_computations(vec![("a", "eq")], vec![("a", "nonexistent", "left")]);
         let result = materialize_dags(&computations);
         let errors = result.expect_err("nonexistent target should fail");
         assert!(

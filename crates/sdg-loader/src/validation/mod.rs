@@ -3,21 +3,32 @@ pub mod schema_pass;
 pub mod semantic_pass;
 pub mod version_pass;
 
+pub use dag_pass::MaterializedDag;
+
 use std::path::Path;
 
 use crate::error::SdgError;
 use crate::types::ServiceDefinition;
+
+/// Fully validated SDG with materialized DAG, ready for runtime use.
+#[derive(Debug)]
+pub struct ValidatedSdg {
+    /// The deserialized service definition.
+    pub definition: ServiceDefinition,
+    /// The materialized computation DAG with pre-computed topological order.
+    pub dag: MaterializedDag,
+}
 
 /// Load and validate an SDG file from the given path.
 ///
 /// Runs validation passes in strict order (per D-28):
 /// 1. JSON Schema conformance
 /// 2. Version compatibility
-/// 3. Semantic validation (wired in Plan 03)
-/// 4. DAG materialization (wired in Plan 03)
+/// 3. Semantic validation
+/// 4. DAG materialization
 ///
 /// Each pass collects all errors. Later passes do not run if earlier pass fails (D-29).
-pub fn load(path: &Path) -> Result<ServiceDefinition, Vec<SdgError>> {
+pub fn load(path: &Path) -> Result<ValidatedSdg, Vec<SdgError>> {
     // Read file
     let content = std::fs::read_to_string(path).map_err(|e| {
         vec![SdgError::FileRead {
@@ -38,7 +49,7 @@ pub fn load(path: &Path) -> Result<ServiceDefinition, Vec<SdgError>> {
 
 /// Validate raw JSON without loading from file.
 /// Useful for testing or when JSON is already in memory.
-pub fn validate(raw: &serde_json::Value) -> Result<ServiceDefinition, Vec<SdgError>> {
+pub fn validate(raw: &serde_json::Value) -> Result<ValidatedSdg, Vec<SdgError>> {
     // Pass 1: Schema conformance
     let schema_errors = schema_pass::validate_schema(raw);
     if !schema_errors.is_empty() {
@@ -58,10 +69,16 @@ pub fn validate(raw: &serde_json::Value) -> Result<ServiceDefinition, Vec<SdgErr
         }]
     })?;
 
-    // Pass 3: Semantic validation (placeholder -- wired in Plan 03)
-    // Pass 4: DAG materialization (placeholder -- wired in Plan 03)
+    // Pass 3: Semantic validation
+    let semantic_errors = semantic_pass::validate_semantics(&definition);
+    if !semantic_errors.is_empty() {
+        return Err(semantic_errors);
+    }
 
-    Ok(definition)
+    // Pass 4: DAG materialization + cycle detection
+    let dag = dag_pass::materialize_dags(&definition.computations)?;
+
+    Ok(ValidatedSdg { definition, dag })
 }
 
 #[cfg(test)]
@@ -78,9 +95,9 @@ mod tests {
     #[test]
     fn test_load_canonical_fixture() {
         let result = load(&canonical_fixture_path());
-        let sd = result.expect("canonical fixture should load successfully");
-        assert_eq!(sd.service.name, "task-tracker-extended");
-        assert_eq!(sd.model.aggregates.len(), 2);
+        let validated = result.expect("canonical fixture should load successfully");
+        assert_eq!(validated.definition.service.name, "task-tracker-extended");
+        assert_eq!(validated.definition.model.aggregates.len(), 2);
     }
 
     #[test]
@@ -145,11 +162,11 @@ mod tests {
         let raw: serde_json::Value =
             serde_json::from_str(&content).expect("fixture must be valid JSON");
 
-        let sd = validate(&raw).expect("canonical fixture should validate");
-        assert_eq!(sd.service.name, "task-tracker-extended");
+        let validated = validate(&raw).expect("canonical fixture should validate");
+        assert_eq!(validated.definition.service.name, "task-tracker-extended");
     }
 
-    // --- Fixture tests (Task 2) ---
+    // --- Fixture tests (from Plan 02) ---
 
     fn fixture_path() -> std::path::PathBuf {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -158,7 +175,7 @@ mod tests {
         ))
     }
 
-    fn load_fixture() -> ServiceDefinition {
+    fn load_fixture() -> ValidatedSdg {
         let content = std::fs::read_to_string(fixture_path()).expect("fixture file must exist");
         let raw: serde_json::Value =
             serde_json::from_str(&content).expect("fixture must be valid JSON");
@@ -179,14 +196,19 @@ mod tests {
 
     #[test]
     fn test_fixture_deserializes() {
-        let sd = load_fixture();
-        assert_eq!(sd.model.aggregates.len(), 2);
+        let validated = load_fixture();
+        assert_eq!(validated.definition.model.aggregates.len(), 2);
     }
 
     #[test]
     fn test_fixture_task_states() {
-        let sd = load_fixture();
-        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        let validated = load_fixture();
+        let task = validated
+            .definition
+            .model
+            .aggregates
+            .get("Task")
+            .expect("Task aggregate");
         assert_eq!(
             task.states,
             vec!["Created", "InProgress", "Done", "Cancelled"]
@@ -195,15 +217,25 @@ mod tests {
 
     #[test]
     fn test_fixture_user_states() {
-        let sd = load_fixture();
-        let user = sd.model.aggregates.get("User").expect("User aggregate");
+        let validated = load_fixture();
+        let user = validated
+            .definition
+            .model
+            .aggregates
+            .get("User")
+            .expect("User aggregate");
         assert_eq!(user.states, vec!["Active", "Deactivated"]);
     }
 
     #[test]
     fn test_fixture_task_fields() {
-        let sd = load_fixture();
-        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        let validated = load_fixture();
+        let task = validated
+            .definition
+            .model
+            .aggregates
+            .get("Task")
+            .expect("Task aggregate");
         let field_names: Vec<&String> = task.fields.keys().collect();
         for expected in &[
             "title",
@@ -227,15 +259,16 @@ mod tests {
 
     #[test]
     fn test_fixture_computation_nodes() {
-        let sd = load_fixture();
+        let validated = load_fixture();
         // The spec example has ~22 nodes
         assert!(
-            sd.computations.nodes.len() >= 22,
+            validated.definition.computations.nodes.len() >= 22,
             "expected at least 22 computation nodes, got {}",
-            sd.computations.nodes.len()
+            validated.definition.computations.nodes.len()
         );
         // Check key nodes exist
-        let node_ids: Vec<&str> = sd
+        let node_ids: Vec<&str> = validated
+            .definition
             .computations
             .nodes
             .iter()
@@ -257,19 +290,24 @@ mod tests {
 
     #[test]
     fn test_fixture_computation_edges() {
-        let sd = load_fixture();
+        let validated = load_fixture();
         // The spec example has ~22 edges
         assert!(
-            sd.computations.edges.len() >= 22,
+            validated.definition.computations.edges.len() >= 22,
             "expected at least 22 computation edges, got {}",
-            sd.computations.edges.len()
+            validated.definition.computations.edges.len()
         );
     }
 
     #[test]
     fn test_fixture_complete_guard() {
-        let sd = load_fixture();
-        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        let validated = load_fixture();
+        let task = validated
+            .definition
+            .model
+            .aggregates
+            .get("Task")
+            .expect("Task aggregate");
         let complete = task
             .transitions
             .get("Complete")
@@ -283,8 +321,13 @@ mod tests {
 
     #[test]
     fn test_fixture_create_auto_fields() {
-        let sd = load_fixture();
-        let task = sd.model.aggregates.get("Task").expect("Task aggregate");
+        let validated = load_fixture();
+        let task = validated
+            .definition
+            .model
+            .aggregates
+            .get("Task")
+            .expect("Task aggregate");
         let create = task.transitions.get("Create").expect("Create transition");
         assert_eq!(
             create.auto_fields.get("author_id").map(String::as_str),
@@ -296,7 +339,71 @@ mod tests {
     #[test]
     fn test_fixture_load_from_file() {
         let result = load(&fixture_path());
-        let sd = result.expect("fixture should load from file path");
-        assert_eq!(sd.service.name, "task-tracker-extended");
+        let validated = result.expect("fixture should load from file path");
+        assert_eq!(validated.definition.service.name, "task-tracker-extended");
+    }
+
+    // --- Pipeline integration tests (Plan 03) ---
+
+    #[test]
+    fn test_full_pipeline_canonical_fixture() {
+        let result = load(&fixture_path());
+        let validated = result.expect("canonical fixture should pass full pipeline");
+        assert_eq!(validated.definition.service.name, "task-tracker-extended");
+        assert!(
+            !validated.dag.topo_order.is_empty(),
+            "topo_order should not be empty for fixture with computation nodes"
+        );
+    }
+
+    #[test]
+    fn test_pipeline_halts_at_semantic() {
+        // Create a file that passes schema + version but has semantic errors.
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("semantic_error.sdg.json");
+        let content = serde_json::json!({
+            "schema_version": "2.0.0",
+            "service": { "name": "test" },
+            "model": {
+                "aggregates": {
+                    "Task": {
+                        "fields": { "title": { "type": "string" } },
+                        "states": ["Created", "Done"],
+                        "transitions": {
+                            "Bad": {
+                                "from": "Creatd",
+                                "to": "Done"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&content).unwrap())
+            .expect("write temp file");
+
+        let result = load(&path);
+        let errors = result.expect_err("semantic error should fail");
+        // Errors should be semantic (not DAG)
+        for error in &errors {
+            assert_eq!(
+                error.pass(),
+                "semantic",
+                "expected semantic error, got {}: {error:?}",
+                error.pass()
+            );
+        }
+    }
+
+    #[test]
+    fn test_pipeline_load_returns_validated_sdg() {
+        let result = load(&fixture_path());
+        let validated = result.expect("fixture should load");
+        // Verify both definition and dag are present.
+        assert!(!validated.definition.service.name.is_empty());
+        assert_eq!(
+            validated.dag.graph.node_count(),
+            validated.definition.computations.nodes.len()
+        );
     }
 }

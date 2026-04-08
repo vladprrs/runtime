@@ -21,7 +21,7 @@
       { "id": "linked_states",       "type": "lookup_many",  "params": { "aggregate": "Task", "pick": "state" } },
       { "id": "open_linked",         "type": "filter",       "params": { "not_in": ["Done", "Cancelled"] } },
       { "id": "open_count",          "type": "count" },
-      { "id": "zero",                "type": "literal",      "params": { "value": 0 } },
+      { "id": "zero",                "type": "literal",      "params": { "value": 0, "output_type": "integer" } },
       { "id": "all_linked_done",     "type": "eq" },
 
       { "id": "can_complete",        "type": "and" },
