@@ -75,8 +75,8 @@ pub fn validate(raw: &serde_json::Value) -> Result<ValidatedSdg, Vec<SdgError>> 
         return Err(semantic_errors);
     }
 
-    // Pass 4: DAG materialization + cycle detection
-    let dag = dag_pass::materialize_dags(&definition.computations)?;
+    // Pass 4: DAG materialization + cycle detection + edge type-checking
+    let dag = dag_pass::materialize_dags(&definition)?;
 
     Ok(ValidatedSdg { definition, dag })
 }
