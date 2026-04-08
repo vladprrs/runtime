@@ -12,12 +12,11 @@ The SDG file is the single source of truth for service behavior. Changing the mo
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] SDG JSON Schema defined and validated at load time — Validated in Phase 2: SDG Schema & Loader
+- [x] SDG loader parses and materializes computation DAG from JSON — Validated in Phase 2: SDG Schema & Loader
+- [x] Cargo workspace with 8 crates, pinned toolchain, Dokploy CI, TDD infrastructure — Validated in Phase 1: Dev Environment
 
 ### Active
-
-- [ ] SDG JSON Schema defined and validated at load time
-- [ ] SDG loader parses and materializes computation DAG from JSON
 - [ ] Append-only event store on SQLite with per-aggregate streams and optimistic concurrency
 - [ ] Aggregate engine executes state machine transitions and computation DAG
 - [ ] Transactional outbox guarantees event delivery from store to consumers
@@ -27,7 +26,6 @@ The SDG file is the single source of truth for service behavior. Changing the mo
 - [ ] Built-in observability: OTel metrics, distributed tracing, structured logging
 - [ ] CLI command validates SDG files against schema before startup
 - [ ] End-to-end demo: task tracker SDG loaded, tasks created, states transitioned, projections queried via API
-- [ ] Cargo workspace with 8 crates, pinned toolchain, Dokploy CI, TDD infrastructure
 
 ### Out of Scope
 
@@ -95,4 +93,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-07 after initialization*
+*Last updated: 2026-04-08 after Phase 2 completion*
